@@ -14,7 +14,7 @@ col_ETR = "LogTime"  # Estimated Time to Resolve
 col_date = "Date"
 
 # ===== LOAD DATA =====
-df = pd.read_excel(daily)
+df = pd.read_excel(daily.xlsx)
 
 # Convert Date column to datetime
 df[col_date] = pd.to_datetime(df[col_date], errors='coerce')
