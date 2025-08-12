@@ -3,7 +3,7 @@ from collections import Counter
 
 # ===== USER CONFIG =====
 # Change this to your Excel file path
-file_path = r"C:\path\to\your\data.xlsx"
+file_path = r"daily.xlsx"
 
 # Column names (update if your Excel columns are different)
 col_user = "Caller"
