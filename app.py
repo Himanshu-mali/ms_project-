@@ -2,52 +2,96 @@ import pandas as pd
 from collections import Counter
 
 # ===== USER CONFIG =====
-# Change this to your Excel file path
-file_path = r"daily.xlsx"
+FILE_DAILY = r"daily.xlsx"
+FILE_MONTHLY = r"monthly.xlsx"
 
-# Column names (update if your Excel columns are different)
-col_user = "Caller"
-col_problem = "Description"
-col_helpdesk = "Assigned Engineer"
-col_status = "Status"
-col_ETR = "LogTime"  # Estimated Time to Resolve
-col_date = "Date"
+# Excel column names
+COL_TICKET_NO = "Ticket No."
+COL_CALLER = "Caller"
+COL_PROBLEM = "Description"
+COL_ENGINEER = "Assigned Engineer"
+COL_STATUS = "Status"
+COL_ETR = "LogTime"  # Estimated Time to Resolve
+COL_DATE = "Date"
 
-# ===== LOAD DATA =====
-df = pd.read_excel(daily.xlsx)
+def load_excel(file):
+    return pd.read_excel(file)
 
-# Convert Date column to datetime
-df[col_date] = pd.to_datetime(df[col_date], errors='coerce')
+def analyze_missing_etr(df):
+    """Return ticket numbers with missing ETR."""
+    missing_etr_df = df[df[COL_ETR].isna() | (df[COL_ETR].astype(str).str.strip() == "")]
+    print(f"Tickets without proper ETR: {len(missing_etr_df)}")
+    if not missing_etr_df.empty:
+        print("Ticket numbers with missing ETR:")
+        print(missing_etr_df[COL_TICKET_NO].tolist())
+    else:
+        print("All tickets have ETR updated.")
 
-# ===== 1. Check if ETR is properly updated =====
-missing_etr = df[df[col_ETR].isna() | (df[col_ETR].astype(str).str.strip() == "")]
-print(f"Tickets without proper ETR: {len(missing_etr)}")
-if not missing_etr.empty:
-    print(missing_etr[[col_user, col_problem, col_helpdesk, col_status, col_ETR]])
+def analyze_daily_pending_engineer(df):
+    """For each day, show the engineer with the most pending tickets."""
+    df[COL_DATE] = pd.to_datetime(df[COL_DATE], errors='coerce')
+    if df[COL_DATE].isna().all():
+        print("No valid dates found in daily.xlsx.")
+        return
 
-# ===== 2. Most common problems =====
-problem_counts = Counter(df[col_problem])
-print("\nMost common problems:")
-for problem, count in problem_counts.most_common(10):
-    print(f"{problem} - {count} times")
+    days = df[COL_DATE].dt.date.unique()
+    print("\nDaily Pending Ticket Analysis (Engineer with most pending tickets):")
+    for day in sorted(days):
+        day_df = df[(df[COL_DATE].dt.date == day) & (df[COL_STATUS].str.lower() == "pending")]
+        if not day_df.empty:
+            engineer_counts = Counter(day_df[COL_ENGINEER])
+            top = engineer_counts.most_common(1)
+            if top:
+                engineer, count = top[0]
+                print(f"{day}: {engineer} ({count} pending tickets)")
+            else:
+                print(f"{day}: No pending tickets.")
+        else:
+            print(f"{day}: No pending tickets.")
 
-# ===== 3. Helpdesk with most pending tickets =====
-pending_df = df[df[col_status].str.lower() == "pending"]
-helpdesk_counts = Counter(pending_df[col_helpdesk])
-if helpdesk_counts:
-    top_helpdesk, top_count = helpdesk_counts.most_common(1)[0]
-    print(f"\nHelpdesk with most pending tickets: {top_helpdesk} ({top_count} tickets)")
-else:
-    print("\nNo pending tickets found.")
+def analyze_monthly(file):
+    """Analyze monthly tickets and problems."""
+    df = load_excel(file)
+    df[COL_DATE] = pd.to_datetime(df[COL_DATE], errors='coerce')
+    if df.empty or df[COL_DATE].isna().all():
+        print("\nNo valid data in monthly.xlsx.")
+        return
 
-# ===== 4. Top 10 users who raised most tickets last month =====
-if not df.empty:
-    last_month = df[col_date].max().month - 1 or 12
-    last_month_year = df[col_date].max().year if last_month != 12 else df[col_date].max().year - 1
-    last_month_df = df[(df[col_date].dt.month == last_month) & (df[col_date].dt.year == last_month_year)]
-    user_counts = Counter(last_month_df[col_user])
-    print(f"\nTop 10 users who raised most tickets in {last_month}/{last_month_year}:")
-    for user, count in user_counts.most_common(10):
+    # Top 10 users who raised max tickets
+    user_counter = Counter(df[COL_CALLER])
+    print("\nTop 10 users who raised most tickets last month:")
+    for user, count in user_counter.most_common(10):
         print(f"{user} - {count} tickets")
-else:
-    print("\nNo data to analyze for last month.")
+
+    # Problem which caused maximum time
+    # "Maximum time" means the highest total ETR for problems
+    df_valid_etr = df.copy()
+    df_valid_etr[COL_ETR] = pd.to_numeric(df_valid_etr[COL_ETR], errors='coerce')
+    problem_time = df_valid_etr.groupby(COL_PROBLEM)[COL_ETR].sum().sort_values(ascending=False)
+    if not problem_time.empty:
+        max_problem = problem_time.index[0]
+        max_time = problem_time.iloc[0]
+        print(f"\nProblem which caused maximum total time: '{max_problem}' ({max_time} units of time)")
+    else:
+        print("\nNo valid ETR data to analyze problem durations.")
+
+def main():
+    # Load daily data
+    daily_df = load_excel(FILE_DAILY)
+
+    # 1. Tickets with missing ETR
+    analyze_missing_etr(daily_df)
+
+    # 2. Daily pending engineer analysis
+    analyze_daily_pending_engineer(daily_df)
+
+    # 3. If today is the last day of the month, run monthly analysis
+    import datetime
+    today = datetime.date.today()
+    next_day = today + datetime.timedelta(days=1)
+    if next_day.month != today.month:
+        print("\n=== Monthly Analysis ===")
+        analyze_monthly(FILE_MONTHLY)
+
+if __name__ == "__main__":
+    main()
